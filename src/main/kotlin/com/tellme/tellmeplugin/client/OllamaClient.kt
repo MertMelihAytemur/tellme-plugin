@@ -20,6 +20,49 @@ object OllamaClient {
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
     /**
+     * Checks if Ollama is running and the model is downloaded.
+     * Returns a pair of (isOllamaRunning, isModelDownloaded).
+     */
+    fun checkStatus(): Pair<Boolean, Boolean> {
+        val running = isOllamaRunning()
+        if (!running) return false to false
+        
+        val modelReady = isModelDownloaded(OllamaConfig.MODEL)
+        return true to modelReady
+    }
+
+    private fun isOllamaRunning(): Boolean {
+        val request = Request.Builder()
+            .url("http://localhost:11434/api/tags") // Use tags endpoint to check existence
+            .get()
+            .build()
+        
+        return try {
+            client.newCall(request).execute().use { it.isSuccessful }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun isModelDownloaded(modelName: String): Boolean {
+        val request = Request.Builder()
+            .url("http://localhost:11434/api/tags")
+            .get()
+            .build()
+            
+        return try {
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return false
+                val body = response.body?.string() ?: return false
+                // Simple check if model name exists in the tags list
+                body.contains("\"name\":\"$modelName\"") || body.contains("\"name\":\"${modelName.substringBefore(":")}\"")
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /**
      * Extracts text from Anthropic-style SSE event (content_block_delta).
      */
     private fun extractDeltaText(json: String): String? {

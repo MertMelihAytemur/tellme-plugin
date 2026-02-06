@@ -48,35 +48,22 @@ class TellMeToolWindow(private val project: Project) : Disposable {
     private lateinit var tabManager: TabManager
 
     // UI Components
+    // Components
     private val rootPanel = JPanel(BorderLayout())
 
     private val headerPanel = JPanel(BorderLayout()).apply {
-        border = JBUI.Borders.empty(4, 6, 4, 6)
+        border = JBUI.Borders.empty(0, 0, 0, 0)
         background = UIUtil.getPanelBackground()
     }
 
     private val statusIcon = JBLabel(AnimatedIcon.Default())
     private val statusLabel = JBLabel("Ready")
     
-    // Options button - shows a popup menu with Refresh, Copy, Refactor
-    private val optionsButton = JButton(AllIcons.Actions.More).apply {
-        toolTipText = "Options"
-        cursor = java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR)
-        isContentAreaFilled = false
-        isBorderPainted = false
-        isFocusPainted = false
-        margin = java.awt.Insets(0, 0, 0, 0)
-        isVisible = true
-        addActionListener { e ->
-            showOptionsMenu(this)
-        }
-    }
-    
     private val statusPanel = JPanel(BorderLayout()).apply {
-        border = JBUI.Borders.empty(4, 8, 4, 8)
+        border = JBUI.Borders.empty(2, 6, 2, 6)
         background = UIUtil.getPanelBackground()
         
-        val leftPanel = JPanel(FlowLayout(FlowLayout.LEFT, 8, 0)).apply {
+        val leftPanel = JPanel(FlowLayout(FlowLayout.LEFT, 6, 0)).apply {
             isOpaque = false
             add(statusIcon)
             add(statusLabel)
@@ -119,10 +106,8 @@ class TellMeToolWindow(private val project: Project) : Disposable {
             scrollToTop() // Switch to top on tab change
         }
 
-        // Header with tabs and options button
+        // Header with tabs
         headerPanel.add(tabManager.getComponent(), BorderLayout.CENTER)
-        headerPanel.add(optionsButton, BorderLayout.EAST)
-
         rootPanel.add(headerPanel, BorderLayout.NORTH)
 
         // Viewer component
@@ -141,6 +126,9 @@ class TellMeToolWindow(private val project: Project) : Disposable {
         cefRenderer.onLinkClicked = { url: String -> handleLinkClick(url) }
         swingRenderer.onLinkClicked = { url: String -> handleLinkClick(url) }
 
+        // Initial check
+        checkOllamaStatus()
+
         // JCEF hierarchy listener
         if (useJcef) {
             cefRenderer.getComponent()!!.addHierarchyListener {
@@ -148,10 +136,25 @@ class TellMeToolWindow(private val project: Project) : Disposable {
                 if (!startedWhenShowing && component.isShowing) {
                     startedWhenShowing = true
                     cefRenderer.ensureBaseLoaded()
-                    renderSelectedOrReady()
+                    checkOllamaStatus()
                 } else if (component.isShowing) {
                     renderSelectedOrReady()
                 }
+            }
+        }
+    }
+
+    private var ollamaRunning = false
+    private var modelDownloaded = false
+
+    private fun checkOllamaStatus(silent: Boolean = false) {
+        ApplicationManager.getApplication().executeOnPooledThread {
+            val status = OllamaClient.checkStatus()
+            ollamaRunning = status.first
+            modelDownloaded = status.second
+            
+            ApplicationManager.getApplication().invokeLater {
+                renderSelectedOrReady()
             }
         }
     }
@@ -287,6 +290,11 @@ class TellMeToolWindow(private val project: Project) : Disposable {
     }
 
     private fun renderSelectedOrReady() {
+        if (!ollamaRunning || !modelDownloaded) {
+            showOnboarding()
+            return
+        }
+
         val session = sessionManager.getCurrentSession()
 
         if (session == null) {
@@ -321,11 +329,12 @@ class TellMeToolWindow(private val project: Project) : Disposable {
         }
     }
 
-    /**
-     * Immediately renders the current session's content without debouncing.
-     * Used when switching tabs to ensure correct content is shown instantly.
-     */
     private fun renderCurrentSessionImmediately() {
+        if (!ollamaRunning || !modelDownloaded) {
+            showOnboarding()
+            return
+        }
+
         val session = sessionManager.getCurrentSession()
 
         if (session == null) {
@@ -446,28 +455,32 @@ class TellMeToolWindow(private val project: Project) : Disposable {
         statusLabel.text = text
     }
     
-    private fun showOptionsMenu(component: JComponent) {
-        val menu = JPopupMenu()
-        
-        val refactorItem = JMenuItem("Refactor", AllIcons.Actions.RefactoringBulb).apply {
-            addActionListener { refactorCurrent() }
-        }
-        val refreshItem = JMenuItem("Refresh", AllIcons.Actions.Refresh).apply {
-            addActionListener { refreshCurrent() }
-        }
-        val copyItem = JMenuItem("Copy Markdown", AllIcons.Actions.Copy).apply {
-            addActionListener { copyCurrentMarkdown() }
-        }
-        
-        menu.add(refactorItem)
-        menu.addSeparator()
-        menu.add(refreshItem)
-        menu.add(copyItem)
-        
-        menu.show(component, 0, component.height)
+    /**
+     * Gets actions for the ToolWindow title bar.
+     */
+    fun getTitleActions(): List<com.intellij.openapi.actionSystem.AnAction> {
+        return listOf(
+            object : com.intellij.openapi.actionSystem.AnAction("Refactor", "Refactor target file", AllIcons.Actions.RefactoringBulb) {
+                override fun actionPerformed(e: com.intellij.openapi.actionSystem.AnActionEvent) = refactorCurrent()
+            },
+            object : com.intellij.openapi.actionSystem.AnAction("Refresh", "Reset session", AllIcons.Actions.Refresh) {
+                override fun actionPerformed(e: com.intellij.openapi.actionSystem.AnActionEvent) = refreshCurrent()
+            },
+            object : com.intellij.openapi.actionSystem.AnAction("Copy Markdown", "Copy to clipboard", AllIcons.Actions.Copy) {
+                override fun actionPerformed(e: com.intellij.openapi.actionSystem.AnActionEvent) = copyCurrentMarkdown()
+            }
+        )
     }
 
     // ---- Viewer helpers ----
+
+    private fun showOnboarding() {
+        if (useJcef) {
+            cefRenderer.showOnboarding(ollamaRunning, modelDownloaded)
+        } else {
+            swingRenderer.showOnboarding(ollamaRunning, modelDownloaded)
+        }
+    }
 
     private fun showReady() {
         if (useJcef) {
@@ -494,10 +507,29 @@ class TellMeToolWindow(private val project: Project) : Disposable {
     }
 
     private fun handleLinkClick(url: String) {
+        if (url == "tellme://check") {
+            checkOllamaStatus()
+            return
+        }
+
         val session = sessionManager.getCurrentSession() ?: return
-        when (url) {
-            "tellme://explain" -> startAnalysis(session, OllamaConfig.PromptType.EXPLAIN)
-            "tellme://refactor" -> startAnalysis(session, OllamaConfig.PromptType.REFACTOR)
+        
+        // Before any action, verify Ollama is still there
+        ApplicationManager.getApplication().executeOnPooledThread {
+            val status = OllamaClient.checkStatus()
+            ollamaRunning = status.first
+            modelDownloaded = status.second
+            
+            ApplicationManager.getApplication().invokeLater {
+                if (!ollamaRunning || !modelDownloaded) {
+                    showOnboarding()
+                } else {
+                    when (url) {
+                        "tellme://explain" -> startAnalysis(session, OllamaConfig.PromptType.EXPLAIN)
+                        "tellme://refactor" -> startAnalysis(session, OllamaConfig.PromptType.REFACTOR)
+                    }
+                }
+            }
         }
     }
 

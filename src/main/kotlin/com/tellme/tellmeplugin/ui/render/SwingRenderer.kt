@@ -51,6 +51,11 @@ class SwingRenderer {
         editorPane.caretPosition = 0
     }
 
+    fun showOnboarding(ollamaRunning: Boolean, modelDownloaded: Boolean) {
+        editorPane.text = HtmlTemplates.swingSafeHtml(HtmlTemplates.onboardingHtml(ollamaRunning, modelDownloaded))
+        editorPane.caretPosition = 0
+    }
+
     /**
      * Updates the content with raw HTML body.
      */

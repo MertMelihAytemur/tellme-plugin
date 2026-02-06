@@ -51,6 +51,29 @@ class CefRenderer(private val parentDisposable: Disposable) {
             browser = JBCefBrowser()
             browser!!.jbCefClient.addLoadHandler(loadHandler, browser!!.cefBrowser)
             
+            // Fix initial zero-size issues when IDE opens
+            browser!!.component.addComponentListener(object : java.awt.event.ComponentAdapter() {
+                override fun componentResized(e: java.awt.event.ComponentEvent?) {
+                    ApplicationManager.getApplication().invokeLater {
+                        val comp = browser?.component ?: return@invokeLater
+                        browser?.cefBrowser?.wasResized(comp.width, comp.height)
+                        browser?.component?.revalidate()
+                        browser?.component?.repaint()
+                        // Force layout update inside the browser
+                        browser?.cefBrowser?.executeJavaScript("window.dispatchEvent(new Event('resize'));", "", 0)
+                    }
+                }
+                override fun componentShown(e: java.awt.event.ComponentEvent?) {
+                    ApplicationManager.getApplication().invokeLater {
+                        val comp = browser?.component ?: return@invokeLater
+                        browser?.cefBrowser?.wasResized(comp.width, comp.height)
+                        browser?.component?.revalidate()
+                        browser?.component?.repaint()
+                        browser?.cefBrowser?.executeJavaScript("window.dispatchEvent(new Event('resize'));", "", 0)
+                    }
+                }
+            })
+            
             // Handle tellme:// protocol links
             browser!!.jbCefClient.addRequestHandler(object : org.cef.handler.CefRequestHandlerAdapter() {
                 override fun onBeforeBrowse(
@@ -153,6 +176,14 @@ class CefRenderer(private val parentDisposable: Disposable) {
     fun showSelectionScreen(fileName: String) {
         ensureBaseLoaded()
         updateBody(HtmlTemplates.selectionScreenHtml(fileName))
+    }
+
+    /**
+     * Shows the onboarding setup screen.
+     */
+    fun showOnboarding(ollamaRunning: Boolean, modelDownloaded: Boolean) {
+        ensureBaseLoaded()
+        updateBody(HtmlTemplates.onboardingHtml(ollamaRunning, modelDownloaded))
     }
 
     /**

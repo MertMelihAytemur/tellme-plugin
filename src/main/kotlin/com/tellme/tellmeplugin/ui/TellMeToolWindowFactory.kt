@@ -24,6 +24,9 @@ class TellMeToolWindowFactory : ToolWindowFactory {
         
         toolWindow.contentManager.addContent(content)
         
+        // Add title actions (Refresh, Copy, etc.) to the tool window title bar
+        toolWindow.setTitleActions(ui.getTitleActions())
+        
         // Hide the content tab bar when there's only one content
         toolWindow.component.putClientProperty("HideIdLabel", true)
     }
