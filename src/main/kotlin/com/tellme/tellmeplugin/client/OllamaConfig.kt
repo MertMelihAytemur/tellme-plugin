@@ -28,28 +28,50 @@ object OllamaConfig {
     /** Call timeout */
     val CALL_TIMEOUT: Duration = Duration.ofMinutes(5)
 
+    /**
+     * Types of prompts supported by the plugin.
+     */
+    enum class PromptType {
+        EXPLAIN,
+        REFACTOR
+    }
+
     /** System prompt template for code analysis */
-    fun buildPrompt(fileName: String, fileContent: String): String {
+    fun buildPrompt(fileName: String, fileContent: String, type: PromptType = PromptType.EXPLAIN): String {
         val clippedContent = if (fileContent.length > MAX_CONTENT_LENGTH) {
             fileContent.take(MAX_CONTENT_LENGTH)
         } else {
             fileContent
         }
 
-        return """
-        Sen bir Android/Kotlin code reviewer'sın.
-        Aşağıdaki dosyayı projedeki rolü açısından açıkla.
-        Çıktıyı Markdown olarak yaz. Başlıklar ###, listeler '-' ile olsun.
-        Format:
-        1) Ne yapıyor?
-        2) Önemli parçalar
-        3) Riskler
-        4) İyileştirme
+        return when (type) {
+            PromptType.EXPLAIN -> """
+                Sen bir Android/Kotlin code reviewer'sın.
+                Aşağıdaki dosyayı projedeki rolü açısından açıkla.
+                Çıktıyı Markdown olarak yaz. Başlıklar ###, listeler '-' ile olsun.
+                Format:
+                1) Ne yapıyor?
+                2) Önemli parçalar
+                3) Riskler
+                4) İyileştirme
 
-        Dosya adı: $fileName
+                Dosya adı: $fileName
 
-        --- DOSYA ---
-        $clippedContent
-    """.trimIndent()
+                --- DOSYA ---
+                $clippedContent
+            """.trimIndent()
+
+            PromptType.REFACTOR -> """
+                Sen bir Android/Kotlin uzmanısın.
+                Aşağıdaki kodu daha temiz, performanslı ve Kotlin best practice'lerine uygun şekilde refactor et.
+                Önce yapılan değişikliklerin kısa bir özetini ver, sonra refactor edilmiş kodun tamamını bir kerede paylaş.
+                Çıktıyı Markdown olarak yaz.
+
+                Dosya adı: $fileName
+
+                --- DOSYA ---
+                $clippedContent
+            """.trimIndent()
+        }
     }
 }

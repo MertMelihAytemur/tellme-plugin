@@ -6,12 +6,16 @@ import com.intellij.util.ui.UIUtil
 import javax.swing.JComponent
 import javax.swing.JEditorPane
 import javax.swing.text.html.HTMLEditorKit
+import javax.swing.event.HyperlinkEvent
 
 /**
  * Fallback renderer using Swing JEditorPane.
  * Used when JCEF is not available.
  */
 class SwingRenderer {
+
+    /** Callback for when a tellme:// link is clicked */
+    var onLinkClicked: ((String) -> Unit)? = null
 
     private val editorPane: JEditorPane = JEditorPane().apply {
         isEditable = false
@@ -20,7 +24,15 @@ class SwingRenderer {
         putClientProperty(JEditorPane.HONOR_DISPLAY_PROPERTIES, true)
         border = JBUI.Borders.empty(10)
         isOpaque = false
-        text = HtmlTemplates.swingSafeHtml("<b>Ready…</b>")
+        
+        addHyperlinkListener { e ->
+            if (e.eventType == HyperlinkEvent.EventType.ACTIVATED) {
+                val url = e.description
+                if (url?.startsWith("tellme://") == true) {
+                    onLinkClicked?.invoke(url)
+                }
+            }
+        }
     }
 
     private val scrollPane: JBScrollPane = JBScrollPane(editorPane).apply {
@@ -33,6 +45,11 @@ class SwingRenderer {
      * Gets the component for embedding in Swing layout.
      */
     fun getComponent(): JComponent = scrollPane
+
+    fun showSelectionScreen(fileName: String) {
+        editorPane.text = HtmlTemplates.swingSafeHtml(HtmlTemplates.selectionScreenHtml(fileName))
+        editorPane.caretPosition = 0
+    }
 
     /**
      * Updates the content with raw HTML body.
@@ -56,7 +73,9 @@ class SwingRenderer {
      * Scrolls the view to the top.
      */
     fun scrollToTop() {
-        editorPane.caretPosition = 0
+        if (editorPane.document.length > 0) {
+            editorPane.caretPosition = 0
+        }
         scrollPane.verticalScrollBar.value = 0
     }
 
@@ -64,21 +83,23 @@ class SwingRenderer {
      * Shows the "Ready" state.
      */
     fun showReady() {
-        editorPane.text = HtmlTemplates.swingSafeHtml("<b>Ready…</b>")
+        editorPane.text = HtmlTemplates.swingSafeHtml(HtmlTemplates.readyHtml())
+        editorPane.caretPosition = 0
     }
 
     /**
      * Shows the loading skeleton (simplified for Swing).
      */
     fun showSkeleton(label: String) {
-        editorPane.text = HtmlTemplates.swingSafeHtml("<b>$label</b>")
+        editorPane.text = HtmlTemplates.swingSafeHtml(HtmlTemplates.skeletonInnerHtml(label))
+        editorPane.caretPosition = 0
     }
 
     /**
      * Renders markdown content.
      */
     fun renderMarkdown(markdown: String, showCaret: Boolean) {
-        val html = MarkdownRenderer.renderToHtml(markdown, showCaret)
-        updateContent(html)
+        val htmlBody = MarkdownRenderer.renderToHtml(markdown, showCaret)
+        updateContent(htmlBody)
     }
 }

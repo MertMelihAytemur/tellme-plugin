@@ -150,16 +150,10 @@ object HtmlTemplates {
           <script>
             window.__setContent = function(html) {
               const content = document.getElementById('content');
-              // Check if user is near bottom (within 50px) before updating
-              const threshold = 50;
-              const isAtBottom = (window.innerHeight + window.scrollY) >= (document.body.scrollHeight - threshold);
-              
+              if (!content) return;
               content.innerHTML = html;
-              
-              // Only scroll to bottom if user was already at bottom
-              if (isAtBottom) {
-                window.scrollTo(0, document.body.scrollHeight);
-              }
+              // Ensure we scroll to bottom for streaming content
+              window.scrollTo(0, document.body.scrollHeight);
             }
             window.__scrollToTop = function() {
               window.scrollTo(0, 0);
@@ -322,6 +316,53 @@ object HtmlTemplates {
      * Ready state HTML - now shows onboarding.
      */
     fun readyHtml(): String = onboardingHtml()
+
+    /**
+     * HTML for selecting analysis type.
+     */
+    fun selectionScreenHtml(fileName: String): String = """
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 70vh; text-align: center; padding: 20px;">
+            <div style="font-size: 48px; margin-bottom: 20px;">🧠</div>
+            <h1 style="border:none; font-size: 22px; margin-bottom: 8px;">How can I help you?</h1>
+            <p style="color: var(--text-muted); margin-bottom: 32px; font-size: 14px;">Select an action for <strong>$fileName</strong></p>
+            
+            <div style="display: flex; flex-direction: column; gap: 12px; width: 100%; max-width: 300px;">
+                <a href="tellme://explain" style="
+                    display: block;
+                    background: var(--accent);
+                    color: white;
+                    padding: 14px 20px;
+                    border-radius: 10px;
+                    text-decoration: none;
+                    font-weight: 600;
+                    font-size: 14px;
+                    transition: transform 0.1s;
+                    box-shadow: 0 4px 12px rgba(86, 156, 214, 0.3);
+                " onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
+                    ⚡ Analyze this file
+                </a>
+                
+                <a href="tellme://refactor" style="
+                    display: block;
+                    background: rgba(206, 145, 120, 0.15);
+                    color: var(--accent-orange);
+                    border: 1px solid var(--accent-orange);
+                    padding: 14px 20px;
+                    border-radius: 10px;
+                    text-decoration: none;
+                    font-weight: 600;
+                    font-size: 14px;
+                    transition: transform 0.1s;
+                " onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
+                    🛠️ Refactor this code
+                </a>
+            </div>
+            
+            <p style="margin-top: 32px; font-size: 12px; color: var(--text-muted);">
+                The analysis will be performed by your local model.
+            </p>
+        </div>
+    """.trimIndent()
 
     /**
      * Wrap body HTML for Swing JEditorPane.

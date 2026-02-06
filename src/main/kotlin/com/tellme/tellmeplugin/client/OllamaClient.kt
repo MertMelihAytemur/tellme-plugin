@@ -64,9 +64,10 @@ object OllamaClient {
     fun explainFileStream(
         fileName: String,
         fileContent: String,
+        promptType: OllamaConfig.PromptType = OllamaConfig.PromptType.EXPLAIN,
         onToken: (String) -> Unit
     ) {
-        val prompt = OllamaConfig.buildPrompt(fileName, fileContent)
+        val prompt = OllamaConfig.buildPrompt(fileName, fileContent, promptType)
 
         val body = """
         {

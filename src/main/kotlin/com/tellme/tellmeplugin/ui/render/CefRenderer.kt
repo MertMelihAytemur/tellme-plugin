@@ -21,14 +21,16 @@ class CefRenderer(private val parentDisposable: Disposable) {
     @Volatile
     private var pendingHtml: String? = null
 
+    /** Callback for when a tellme:// link is clicked */
+    var onLinkClicked: ((String) -> Unit)? = null
+
     private val loadHandler = object : CefLoadHandlerAdapter() {
         override fun onLoadEnd(browser: CefBrowser?, frame: CefFrame?, httpStatusCode: Int) {
             domReady = true
             pendingHtml?.let { html ->
                 pendingHtml = null
-                ApplicationManager.getApplication().invokeLater {
-                    updateBodyNow(html)
-                }
+                // Execute immediately on the same thread to avoid race conditions with subsequent updates
+                updateBodyNow(html)
             }
         }
     }
@@ -48,6 +50,24 @@ class CefRenderer(private val parentDisposable: Disposable) {
         if (browser == null) {
             browser = JBCefBrowser()
             browser!!.jbCefClient.addLoadHandler(loadHandler, browser!!.cefBrowser)
+            
+            // Handle tellme:// protocol links
+            browser!!.jbCefClient.addRequestHandler(object : org.cef.handler.CefRequestHandlerAdapter() {
+                override fun onBeforeBrowse(
+                    browser: CefBrowser?,
+                    frame: CefFrame?,
+                    request: org.cef.network.CefRequest?,
+                    user_gesture: Boolean,
+                    is_redirect: Boolean
+                ): Boolean {
+                    val url = request?.url ?: return false
+                    if (url.startsWith("tellme://")) {
+                        onLinkClicked?.invoke(url)
+                        return true // Block actual navigation
+                    }
+                    return false
+                }
+            }, browser!!.cefBrowser)
         }
 
         return browser!!.component
@@ -125,6 +145,14 @@ class CefRenderer(private val parentDisposable: Disposable) {
         val html = MarkdownRenderer.renderToHtml(markdown, showCaret)
         ensureBaseLoaded()
         updateBody(html)
+    }
+
+    /**
+     * Shows the selection screen (Tell Me vs Refactor).
+     */
+    fun showSelectionScreen(fileName: String) {
+        ensureBaseLoaded()
+        updateBody(HtmlTemplates.selectionScreenHtml(fileName))
     }
 
     /**

@@ -10,6 +10,8 @@ enum class UiState {
     WAITING,
     /** Analysis in progress, streaming tokens */
     LOADING,
+    /** Waiting for user to select analysis type */
+    WAITING_FOR_SELECTION,
     /** Analysis completed successfully */
     DONE,
     /** Analysis failed with an error */

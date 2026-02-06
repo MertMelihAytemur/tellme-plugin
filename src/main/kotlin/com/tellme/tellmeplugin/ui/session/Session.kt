@@ -26,7 +26,9 @@ data class Session(
     /** Timestamp when loading started */
     var loadingStartedAtMs: Long = 0L,
     /** Timestamp of last received token */
-    var lastTokenAtMs: Long = 0L
+    var lastTokenAtMs: Long = 0L,
+    /** Last requested prompt type */
+    var lastPromptType: com.tellme.tellmeplugin.client.OllamaConfig.PromptType? = null
 ) {
     companion object {
         /**

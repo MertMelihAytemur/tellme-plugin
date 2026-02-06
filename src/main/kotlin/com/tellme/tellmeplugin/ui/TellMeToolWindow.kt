@@ -1,5 +1,6 @@
 package com.tellme.tellmeplugin.ui
 
+import com.intellij.icons.AllIcons
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.ide.CopyPasteManager
@@ -9,6 +10,7 @@ import com.intellij.ui.components.JBLabel
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.UIUtil
 import com.tellme.tellmeplugin.client.OllamaClient
+import com.tellme.tellmeplugin.client.OllamaConfig
 import com.tellme.tellmeplugin.ui.render.CefRenderer
 import com.tellme.tellmeplugin.ui.render.SwingRenderer
 import com.tellme.tellmeplugin.ui.session.Session
@@ -56,16 +58,18 @@ class TellMeToolWindow(private val project: Project) : Disposable {
     private val statusIcon = JBLabel(AnimatedIcon.Default())
     private val statusLabel = JBLabel("Ready")
     
-    // Action buttons - only visible when analysis is done
-    private val refreshButton = JButton("Refresh").apply {
-        toolTipText = "Re-analyze current tab from scratch"
-        addActionListener { refreshCurrent() }
-        isVisible = false
-    }
-    private val copyButton = JButton("Copy").apply {
-        toolTipText = "Copy current output (Markdown)"
-        addActionListener { copyCurrentMarkdown() }
-        isVisible = false
+    // Options button - shows a popup menu with Refresh, Copy, Refactor
+    private val optionsButton = JButton(AllIcons.Actions.More).apply {
+        toolTipText = "Options"
+        cursor = java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR)
+        isContentAreaFilled = false
+        isBorderPainted = false
+        isFocusPainted = false
+        margin = java.awt.Insets(0, 0, 0, 0)
+        isVisible = true
+        addActionListener { e ->
+            showOptionsMenu(this)
+        }
     }
     
     private val statusPanel = JPanel(BorderLayout()).apply {
@@ -79,8 +83,6 @@ class TellMeToolWindow(private val project: Project) : Disposable {
         }
         val rightPanel = JPanel(FlowLayout(FlowLayout.RIGHT, 6, 0)).apply {
             isOpaque = false
-            add(refreshButton)
-            add(copyButton)
         }
         
         add(leftPanel, BorderLayout.WEST)
@@ -117,8 +119,9 @@ class TellMeToolWindow(private val project: Project) : Disposable {
             scrollToTop() // Switch to top on tab change
         }
 
-        // Header with tabs only (no buttons)
+        // Header with tabs and options button
         headerPanel.add(tabManager.getComponent(), BorderLayout.CENTER)
+        headerPanel.add(optionsButton, BorderLayout.EAST)
 
         rootPanel.add(headerPanel, BorderLayout.NORTH)
 
@@ -133,6 +136,10 @@ class TellMeToolWindow(private val project: Project) : Disposable {
 
         setStatusReady("Ready")
         showReady()
+
+        // Bind renderer link clicks
+        cefRenderer.onLinkClicked = { url: String -> handleLinkClick(url) }
+        swingRenderer.onLinkClicked = { url: String -> handleLinkClick(url) }
 
         // JCEF hierarchy listener
         if (useJcef) {
@@ -172,10 +179,9 @@ class TellMeToolWindow(private val project: Project) : Disposable {
         tabManager.selectTab(key)
         sessionManager.selectSession(key)
 
-        // Start analysis immediately - each tab runs independently
-        setStatusLoading("Analyzing…")
-        showSkeleton("Analyzing…")
-        startAnalysis(session)
+        // Don't start analysis immediately - show selection screen first
+        session.state = UiState.WAITING_FOR_SELECTION
+        renderSelectedOrReady()
     }
 
     private fun closeTab(key: String) {
@@ -186,10 +192,10 @@ class TellMeToolWindow(private val project: Project) : Disposable {
 
     // ---- Analysis ----
 
-    private fun startAnalysis(session: Session) {
+    private fun startAnalysis(session: Session, type: OllamaConfig.PromptType = OllamaConfig.PromptType.EXPLAIN) {
         session.state = UiState.LOADING
         session.hasToken = false
-        session.showCaret = true
+        session.lastPromptType = type
         session.buffer.setLength(0)
         session.requestId += 1
 
@@ -198,8 +204,9 @@ class TellMeToolWindow(private val project: Project) : Disposable {
         session.lastTokenAtMs = now
 
         if (sessionManager.currentKey == session.key) {
-            setStatusLoading("Analyzing…")
-            showSkeleton("Analyzing…")
+            val statusText = if (type == OllamaConfig.PromptType.REFACTOR) "Refactoring…" else "Analyzing…"
+            setStatusLoading(statusText)
+            showSkeleton(statusText)
         }
 
         val requestId = session.requestId
@@ -208,6 +215,7 @@ class TellMeToolWindow(private val project: Project) : Disposable {
                 OllamaClient.explainFileStream(
                     fileName = session.fileName,
                     fileContent = session.clipped,
+                    promptType = type,
                     onToken = { chunk ->
                         ApplicationManager.getApplication().invokeLater {
                             val s = sessionManager.getSession(session.key) ?: return@invokeLater
@@ -242,7 +250,17 @@ class TellMeToolWindow(private val project: Project) : Disposable {
 
     private fun refreshCurrent() {
         val session = sessionManager.getCurrentSession() ?: return
-        startAnalysis(session)
+        // Reset session state and buffer to show selection screen again
+        session.requestId += 1
+        session.buffer.setLength(0)
+        session.hasToken = false
+        session.state = UiState.WAITING_FOR_SELECTION
+        renderSelectedOrReady()
+    }
+
+    private fun refactorCurrent() {
+        val session = sessionManager.getCurrentSession() ?: return
+        startAnalysis(session, OllamaConfig.PromptType.REFACTOR)
     }
 
     private fun copyCurrentMarkdown() {
@@ -273,30 +291,31 @@ class TellMeToolWindow(private val project: Project) : Disposable {
 
         if (session == null) {
             setStatusReady("Ready")
-            showButtons(false)
             showReady()
             return
         }
 
         when (session.state) {
             UiState.LOADING -> {
-                setStatusLoading("Analyzing…")
-                showButtons(false)
+                val statusText = if (session.lastPromptType == OllamaConfig.PromptType.REFACTOR) "Refactoring…" else "Analyzing…"
+                setStatusLoading(statusText)
                 if (!session.hasToken && session.buffer.isEmpty()) {
-                    showSkeleton("Analyzing…")
+                    showSkeleton(statusText)
                 } else {
                     // Render the current session's buffer
                     renderCurrentNow()
                 }
             }
+            UiState.WAITING_FOR_SELECTION -> {
+                setStatusReady("Ready")
+                showSelectionScreen(session.fileName)
+            }
             UiState.DONE, UiState.ERROR -> {
                 setStatusReady("Ready")
-                showButtons(true)
                 renderCurrentNow()
             }
             UiState.IDLE, UiState.WAITING -> {
                 setStatusReady("Ready")
-                showButtons(false)
                 showReady()
             }
         }
@@ -311,30 +330,31 @@ class TellMeToolWindow(private val project: Project) : Disposable {
 
         if (session == null) {
             setStatusReady("Ready")
-            showButtons(false)
             showReady()
             return
         }
 
         when (session.state) {
             UiState.LOADING -> {
-                setStatusLoading("Analyzing…")
-                showButtons(false)
+                val statusText = if (session.lastPromptType == OllamaConfig.PromptType.REFACTOR) "Refactoring…" else "Analyzing…"
+                setStatusLoading(statusText)
                 if (!session.hasToken && session.buffer.isEmpty()) {
-                    showSkeleton("Analyzing…")
+                    showSkeleton(statusText)
                 } else {
                     // Render current buffer immediately
                     renderCurrentNow()
                 }
             }
+            UiState.WAITING_FOR_SELECTION -> {
+                setStatusReady("Ready")
+                showSelectionScreen(session.fileName)
+            }
             UiState.DONE, UiState.ERROR -> {
                 setStatusReady("Ready")
-                showButtons(true)
                 renderCurrentNow()
             }
             UiState.IDLE, UiState.WAITING -> {
                 setStatusReady("Ready")
-                showButtons(false)
                 showReady()
             }
         }
@@ -348,7 +368,8 @@ class TellMeToolWindow(private val project: Project) : Disposable {
         }
 
         if (session.state == UiState.LOADING && !session.hasToken && session.buffer.isEmpty()) {
-            showSkeleton("Analyzing…")
+            val label = if (session.lastPromptType == OllamaConfig.PromptType.REFACTOR) "Refactoring…" else "Analyzing…"
+            showSkeleton(label)
             return
         }
 
@@ -423,21 +444,32 @@ class TellMeToolWindow(private val project: Project) : Disposable {
         }
         statusIcon.isVisible = true
         statusLabel.text = text
-        // Hide buttons during loading
-        refreshButton.isVisible = false
-        copyButton.isVisible = false
     }
     
-    private fun showButtons(show: Boolean) {
-        refreshButton.isVisible = show
-        copyButton.isVisible = show
+    private fun showOptionsMenu(component: JComponent) {
+        val menu = JPopupMenu()
+        
+        val refactorItem = JMenuItem("Refactor", AllIcons.Actions.RefactoringBulb).apply {
+            addActionListener { refactorCurrent() }
+        }
+        val refreshItem = JMenuItem("Refresh", AllIcons.Actions.Refresh).apply {
+            addActionListener { refreshCurrent() }
+        }
+        val copyItem = JMenuItem("Copy Markdown", AllIcons.Actions.Copy).apply {
+            addActionListener { copyCurrentMarkdown() }
+        }
+        
+        menu.add(refactorItem)
+        menu.addSeparator()
+        menu.add(refreshItem)
+        menu.add(copyItem)
+        
+        menu.show(component, 0, component.height)
     }
 
     // ---- Viewer helpers ----
 
     private fun showReady() {
-        // Hide buttons on onboarding/ready state
-        showButtons(false)
         if (useJcef) {
             cefRenderer.showReady()
         } else {
@@ -450,6 +482,22 @@ class TellMeToolWindow(private val project: Project) : Disposable {
             cefRenderer.showSkeleton(label)
         } else {
             swingRenderer.showSkeleton(label)
+        }
+    }
+
+    private fun showSelectionScreen(fileName: String) {
+        if (useJcef) {
+            cefRenderer.showSelectionScreen(fileName)
+        } else {
+            swingRenderer.showSelectionScreen(fileName)
+        }
+    }
+
+    private fun handleLinkClick(url: String) {
+        val session = sessionManager.getCurrentSession() ?: return
+        when (url) {
+            "tellme://explain" -> startAnalysis(session, OllamaConfig.PromptType.EXPLAIN)
+            "tellme://refactor" -> startAnalysis(session, OllamaConfig.PromptType.REFACTOR)
         }
     }
 
