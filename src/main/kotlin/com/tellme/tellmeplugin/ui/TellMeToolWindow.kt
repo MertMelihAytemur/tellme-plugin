@@ -86,7 +86,7 @@ class TellMeToolWindow(private val project: Project) : Disposable {
     private val idleDoneMs = 650L
     private val maxLoadingMs = 60_000L  // 60 seconds timeout for slow models
 
-    private val renderTimer: Timer = Timer(renderDebounceMs) { renderCurrentNow() }.apply {
+    private val renderTimer: Timer = Timer(renderDebounceMs) { renderCurrentState() }.apply {
         isRepeats = false
     }
 
@@ -102,7 +102,7 @@ class TellMeToolWindow(private val project: Project) : Disposable {
         tabManager = TabManager(project, this) { key ->
             sessionManager.selectSession(key ?: "")
             if (key == null) sessionManager.clearSelection()
-            renderCurrentSessionImmediately()
+            renderCurrentState(true)
             scrollToTop() // Switch to top on tab change
         }
 
@@ -138,7 +138,7 @@ class TellMeToolWindow(private val project: Project) : Disposable {
                     cefRenderer.ensureBaseLoaded()
                     checkOllamaStatus()
                 } else if (component.isShowing) {
-                    renderSelectedOrReady()
+                    renderCurrentState(true)
                 }
             }
         }
@@ -154,7 +154,7 @@ class TellMeToolWindow(private val project: Project) : Disposable {
             modelDownloaded = status.second
             
             ApplicationManager.getApplication().invokeLater {
-                renderSelectedOrReady()
+                renderCurrentState(true)
             }
         }
     }
@@ -172,7 +172,7 @@ class TellMeToolWindow(private val project: Project) : Disposable {
             sessionManager.selectSession(key)
             tabManager.selectTab(key)
             // Force immediate render of selected session's state
-            renderCurrentSessionImmediately()
+            renderCurrentState(true)
             return
         }
 
@@ -184,13 +184,13 @@ class TellMeToolWindow(private val project: Project) : Disposable {
 
         // Don't start analysis immediately - show selection screen first
         session.state = UiState.WAITING_FOR_SELECTION
-        renderSelectedOrReady()
+        renderCurrentState(true)
     }
 
     private fun closeTab(key: String) {
         sessionManager.removeSession(key)
         tabManager.removeTab(key)
-        renderSelectedOrReady()
+        renderCurrentState(true)
     }
 
     // ---- Analysis ----
@@ -258,7 +258,7 @@ class TellMeToolWindow(private val project: Project) : Disposable {
         session.buffer.setLength(0)
         session.hasToken = false
         session.state = UiState.WAITING_FOR_SELECTION
-        renderSelectedOrReady()
+        renderCurrentState(true)
     }
 
     private fun refactorCurrent() {
@@ -289,29 +289,29 @@ class TellMeToolWindow(private val project: Project) : Disposable {
         }
     }
 
-    private fun renderSelectedOrReady() {
+     private fun renderCurrentState(force: Boolean = false) {
         if (!ollamaRunning || !modelDownloaded) {
             showOnboarding()
             return
         }
 
         val session = sessionManager.getCurrentSession()
-
         if (session == null) {
             setStatusReady("Ready")
             showReady()
             return
         }
 
+        // Dispatch based on state
         when (session.state) {
             UiState.LOADING -> {
                 val statusText = if (session.lastPromptType == OllamaConfig.PromptType.REFACTOR) "Refactoring…" else "Analyzing…"
                 setStatusLoading(statusText)
+                
                 if (!session.hasToken && session.buffer.isEmpty()) {
                     showSkeleton(statusText)
                 } else {
-                    // Render the current session's buffer
-                    renderCurrentNow()
+                    renderMarkdownNow(session)
                 }
             }
             UiState.WAITING_FOR_SELECTION -> {
@@ -320,7 +320,7 @@ class TellMeToolWindow(private val project: Project) : Disposable {
             }
             UiState.DONE, UiState.ERROR -> {
                 setStatusReady("Ready")
-                renderCurrentNow()
+                renderMarkdownNow(session)
             }
             UiState.IDLE, UiState.WAITING -> {
                 setStatusReady("Ready")
@@ -329,59 +329,7 @@ class TellMeToolWindow(private val project: Project) : Disposable {
         }
     }
 
-    private fun renderCurrentSessionImmediately() {
-        if (!ollamaRunning || !modelDownloaded) {
-            showOnboarding()
-            return
-        }
-
-        val session = sessionManager.getCurrentSession()
-
-        if (session == null) {
-            setStatusReady("Ready")
-            showReady()
-            return
-        }
-
-        when (session.state) {
-            UiState.LOADING -> {
-                val statusText = if (session.lastPromptType == OllamaConfig.PromptType.REFACTOR) "Refactoring…" else "Analyzing…"
-                setStatusLoading(statusText)
-                if (!session.hasToken && session.buffer.isEmpty()) {
-                    showSkeleton(statusText)
-                } else {
-                    // Render current buffer immediately
-                    renderCurrentNow()
-                }
-            }
-            UiState.WAITING_FOR_SELECTION -> {
-                setStatusReady("Ready")
-                showSelectionScreen(session.fileName)
-            }
-            UiState.DONE, UiState.ERROR -> {
-                setStatusReady("Ready")
-                renderCurrentNow()
-            }
-            UiState.IDLE, UiState.WAITING -> {
-                setStatusReady("Ready")
-                showReady()
-            }
-        }
-    }
-
-    private fun renderCurrentNow() {
-        val session = sessionManager.getCurrentSession()
-        if (session == null) {
-            showReady()
-            return
-        }
-
-        if (session.state == UiState.LOADING && !session.hasToken && session.buffer.isEmpty()) {
-            val label = if (session.lastPromptType == OllamaConfig.PromptType.REFACTOR) "Refactoring…" else "Analyzing…"
-            showSkeleton(label)
-            return
-        }
-
+    private fun renderMarkdownNow(session: Session) {
         val markdown = session.buffer.toString()
         if (useJcef) {
             cefRenderer.renderMarkdown(markdown, session.showCaret)
@@ -460,10 +408,7 @@ class TellMeToolWindow(private val project: Project) : Disposable {
      */
     fun getTitleActions(): List<com.intellij.openapi.actionSystem.AnAction> {
         return listOf(
-            object : com.intellij.openapi.actionSystem.AnAction("Refactor", "Refactor target file", AllIcons.Actions.RefactoringBulb) {
-                override fun actionPerformed(e: com.intellij.openapi.actionSystem.AnActionEvent) = refactorCurrent()
-            },
-            object : com.intellij.openapi.actionSystem.AnAction("Refresh", "Reset session", AllIcons.Actions.Refresh) {
+            object : com.intellij.openapi.actionSystem.AnAction("Menu", "Back to selection screen", AllIcons.Actions.ListFiles) {
                 override fun actionPerformed(e: com.intellij.openapi.actionSystem.AnActionEvent) = refreshCurrent()
             },
             object : com.intellij.openapi.actionSystem.AnAction("Copy Markdown", "Copy to clipboard", AllIcons.Actions.Copy) {
