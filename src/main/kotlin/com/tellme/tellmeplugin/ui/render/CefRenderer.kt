@@ -92,6 +92,14 @@ class CefRenderer(private val parentDisposable: Disposable) {
     }
 
     /**
+     * Scrolls the view to the top.
+     */
+    fun scrollToTop() {
+        val b = browser ?: return
+        b.cefBrowser.executeJavaScript("window.__scrollToTop();", b.cefBrowser.url, 0)
+    }
+
+    /**
      * Shows the "Ready" state.
      */
     fun showReady() {

@@ -38,8 +38,26 @@ class SwingRenderer {
      * Updates the content with raw HTML body.
      */
     fun updateContent(htmlBody: String) {
+        val viewport = scrollPane.viewport
+        val viewRect = viewport.viewRect
+        val contentHeight = editorPane.height
+        
+        // Smart scroll: only follow if already at the bottom
+        val isAtBottom = (viewRect.y + viewRect.height) >= (contentHeight - 50)
+        
         editorPane.text = HtmlTemplates.swingSafeHtml(htmlBody)
-        editorPane.caretPosition = editorPane.document.length
+        
+        if (isAtBottom) {
+            editorPane.caretPosition = editorPane.document.length
+        }
+    }
+
+    /**
+     * Scrolls the view to the top.
+     */
+    fun scrollToTop() {
+        editorPane.caretPosition = 0
+        scrollPane.verticalScrollBar.value = 0
     }
 
     /**

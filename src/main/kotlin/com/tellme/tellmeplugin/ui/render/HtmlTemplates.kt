@@ -149,8 +149,20 @@ object HtmlTemplates {
           </style>
           <script>
             window.__setContent = function(html) {
-              document.getElementById('content').innerHTML = html;
-              window.scrollTo(0, document.body.scrollHeight);
+              const content = document.getElementById('content');
+              // Check if user is near bottom (within 50px) before updating
+              const threshold = 50;
+              const isAtBottom = (window.innerHeight + window.scrollY) >= (document.body.scrollHeight - threshold);
+              
+              content.innerHTML = html;
+              
+              // Only scroll to bottom if user was already at bottom
+              if (isAtBottom) {
+                window.scrollTo(0, document.body.scrollHeight);
+              }
+            }
+            window.__scrollToTop = function() {
+              window.scrollTo(0, 0);
             }
           </script>
         </head>

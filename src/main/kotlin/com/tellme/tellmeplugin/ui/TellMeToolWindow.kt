@@ -113,7 +113,8 @@ class TellMeToolWindow(private val project: Project) : Disposable {
         tabManager = TabManager(project, this) { key ->
             sessionManager.selectSession(key ?: "")
             if (key == null) sessionManager.clearSelection()
-            renderSelectedOrReady()
+            renderCurrentSessionImmediately()
+            scrollToTop() // Switch to top on tab change
         }
 
         // Header with tabs only (no buttons)
@@ -449,6 +450,14 @@ class TellMeToolWindow(private val project: Project) : Disposable {
             cefRenderer.showSkeleton(label)
         } else {
             swingRenderer.showSkeleton(label)
+        }
+    }
+
+    private fun scrollToTop() {
+        if (useJcef) {
+            cefRenderer.scrollToTop()
+        } else {
+            swingRenderer.scrollToTop()
         }
     }
 
