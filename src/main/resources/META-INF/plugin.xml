@@ -2,10 +2,19 @@
     <id>com.tellme.tellme-plugin</id>
 
     <name>Tell Me</name>
-    <vendor url="https://www.yourcompany.com">YourCompany</vendor>
+    <vendor url="https://github.com/merthaytemur">Mert Melih Aytemur</vendor>
 
     <description><![CDATA[
-        Explain the currently opened file using a local model (Ollama).
+        A powerful local AI assistant for IntelliJ IDEA. 
+        Analyze, explain, and refactor your code using local LLMs via Ollama. 
+        Features:
+        <ul>
+            <li><b>Local & Private:</b> All processing is done on your machine.</li>
+            <li><b>Code Explanation:</b> Get clear insights into complex code blocks.</li>
+            <li><b>Refactor Suggestions:</b> Improve code quality with AI-driven suggestions.</li>
+            <li><b>Tabbed Interface:</b> Manage multiple analysis sessions simultaneously.</li>
+            <li><b>Premium UI:</b> Modern, dark-mode first design with glassmorphism touches.</li>
+        </ul>
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
