@@ -2,7 +2,7 @@
     <id>com.tellme.tellme-plugin</id>
 
     <name>Tell Me</name>
-    <vendor url="https://github.com/merthaytemur">Mert Melih Aytemur</vendor>
+    <vendor url="https://github.com/MertMelihAytemur/tellme-plugin">Mert Melih Aytemur</vendor>
 
     <description><![CDATA[
         A powerful local AI assistant for IntelliJ IDEA. 
