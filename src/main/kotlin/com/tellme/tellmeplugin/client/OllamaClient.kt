@@ -20,10 +20,10 @@ object OllamaClient {
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
     /**
-     * Extracts the "response" field from Ollama's streaming JSON.
+     * Extracts text from Anthropic-style SSE event (content_block_delta).
      */
-    private fun extractResponse(json: String): String? {
-        val key = "\"response\":\""
+    private fun extractDeltaText(json: String): String? {
+        val key = "\"text\":\""
         val start = json.indexOf(key)
         if (start == -1) return null
 
@@ -55,11 +55,7 @@ object OllamaClient {
             .replace("\t", "\\t") + "\""
 
     /**
-     * Streams file analysis from Ollama.
-     *
-     * @param fileName Name of the file being analyzed
-     * @param fileContent Content of the file (will be clipped if too long)
-     * @param onToken Callback for each received token
+     * Streams file analysis using Anthropic-compatible API.
      */
     fun explainFileStream(
         fileName: String,
@@ -69,10 +65,17 @@ object OllamaClient {
     ) {
         val prompt = OllamaConfig.buildPrompt(fileName, fileContent, promptType)
 
+        // Anthropic Messages API format
         val body = """
         {
           "model": "${OllamaConfig.MODEL}",
-          "prompt": ${jsonString(prompt)},
+          "messages": [
+            {
+              "role": "user",
+              "content": ${jsonString(prompt)}
+            }
+          ],
+          "max_tokens": ${OllamaConfig.MAX_TOKENS},
           "stream": true
         }
     """.trimIndent()
@@ -80,11 +83,12 @@ object OllamaClient {
         val request = Request.Builder()
             .url(OllamaConfig.ENDPOINT)
             .post(body.toRequestBody(jsonMediaType))
+            .header("Content-Type", "application/json")
             .build()
 
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
-                onToken("Ollama error: HTTP ${response.code}\n")
+                onToken("Error: HTTP ${response.code}\n")
                 onToken(response.body?.string().orEmpty())
                 return
             }
@@ -92,9 +96,16 @@ object OllamaClient {
             val source = response.body?.source() ?: return
             while (!source.exhausted()) {
                 val line = source.readUtf8Line() ?: continue
-                val chunk = extractResponse(line)
-                if (!chunk.isNullOrEmpty()) onToken(chunk)
-                if (line.contains("\"done\":true")) break
+                if (line.startsWith("data: ")) {
+                    val data = line.substring(6)
+                    if (data == "[DONE]") break
+                    
+                    // Look for content_block_delta events
+                    if (data.contains("\"content_block_delta\"") || data.contains("\"text\"")) {
+                        val chunk = extractDeltaText(data)
+                        if (!chunk.isNullOrEmpty()) onToken(chunk)
+                    }
+                }
             }
         }
     }

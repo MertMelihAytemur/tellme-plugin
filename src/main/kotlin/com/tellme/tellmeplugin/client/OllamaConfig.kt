@@ -7,14 +7,17 @@ import java.time.Duration
  * Centralizes all hardcoded values for easy modification.
  */
 object OllamaConfig {
-    /** Ollama API endpoint */
-    const val ENDPOINT = "http://localhost:11434/api/generate"
+    /** Ollama Anthropic-compatible API endpoint */
+    const val ENDPOINT = "http://localhost:11434/v1/messages"
 
-    /** Model to use for code analysis */
+    /** Best local coding model (Claude-equivalent performance) */
     const val MODEL = "qwen2.5-coder:7b"
 
     /** Maximum content length to send (characters) */
     const val MAX_CONTENT_LENGTH = 6_000
+
+    /** Maximum tokens to generate in response */
+    const val MAX_TOKENS = 4096
 
     /** Connection timeout */
     val CONNECT_TIMEOUT: Duration = Duration.ofSeconds(10)
