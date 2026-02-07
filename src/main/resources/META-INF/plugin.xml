@@ -41,4 +41,6 @@
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
     </actions>
+
+    <icon src="META-INF/tell_me_logo.svg"/>
 </idea-plugin>
