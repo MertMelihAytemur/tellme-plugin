@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "com.tellme"
-version = "1.0.0"
+version = "1.0.1"
 
 repositories {
     mavenCentral()
@@ -33,7 +33,10 @@ intellijPlatform {
         }
 
         changeNotes = """
-            Initial release with Premium UI, Multi-tab support and local Ollama integration.
+            <ul>
+                <li><b>New Logo:</b> Updated plugin icon to a new modern design.</li>
+                <li><b>Bug Fixes:</b> Minor UI improvements.</li>
+            </ul>
         """.trimIndent()
     }
 }
