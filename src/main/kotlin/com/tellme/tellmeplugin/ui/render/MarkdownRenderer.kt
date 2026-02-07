@@ -3,9 +3,6 @@ package com.tellme.tellmeplugin.ui.render
 import com.vladsch.flexmark.html.HtmlRenderer
 import com.vladsch.flexmark.parser.Parser
 
-/**
- * Converts Markdown text to HTML using Flexmark.
- */
 object MarkdownRenderer {
 
     private val parser: Parser = Parser.builder().build()

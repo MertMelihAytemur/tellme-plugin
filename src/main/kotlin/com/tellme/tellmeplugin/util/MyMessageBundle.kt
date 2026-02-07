@@ -7,9 +7,6 @@ import java.util.function.Supplier
 
 private const val BUNDLE = "messages.MyMessageBundle"
 
-/**
- * Message bundle for internationalization.
- */
 internal object MyMessageBundle {
     private val instance = DynamicBundle(MyMessageBundle::class.java, BUNDLE)
 

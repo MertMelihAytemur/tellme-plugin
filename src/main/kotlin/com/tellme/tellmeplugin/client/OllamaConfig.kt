@@ -2,44 +2,28 @@ package com.tellme.tellmeplugin.client
 
 import java.time.Duration
 
-/**
- * Configuration for Ollama API client.
- * Centralizes all hardcoded values for easy modification.
- */
 object OllamaConfig {
-    /** Ollama Anthropic-compatible API endpoint */
     const val ENDPOINT = "http://localhost:11434/v1/messages"
 
-    /** Best local coding model (Claude-equivalent performance) */
     const val MODEL = "qwen2.5-coder:7b"
 
-    /** Maximum content length to send (characters) */
     const val MAX_CONTENT_LENGTH = 6_000
 
-    /** Maximum tokens to generate in response */
     const val MAX_TOKENS = 4096
 
-    /** Connection timeout */
     val CONNECT_TIMEOUT: Duration = Duration.ofSeconds(10)
 
-    /** Read timeout for streaming responses */
     val READ_TIMEOUT: Duration = Duration.ofMinutes(5)
 
-    /** Write timeout */
     val WRITE_TIMEOUT: Duration = Duration.ofMinutes(5)
 
-    /** Call timeout */
     val CALL_TIMEOUT: Duration = Duration.ofMinutes(5)
 
-    /**
-     * Types of prompts supported by the plugin.
-     */
     enum class PromptType {
         EXPLAIN,
         REFACTOR
     }
 
-    /** System prompt template for code analysis */
     fun buildPrompt(fileName: String, fileContent: String, type: PromptType = PromptType.EXPLAIN): String {
         val clippedContent = if (fileContent.length > MAX_CONTENT_LENGTH) {
             fileContent.take(MAX_CONTENT_LENGTH)
@@ -48,33 +32,80 @@ object OllamaConfig {
         }
 
         return when (type) {
-            PromptType.EXPLAIN -> """
-                Sen bir Android/Kotlin code reviewer'sın.
-                Aşağıdaki dosyayı projedeki rolü açısından açıkla.
-                Çıktıyı Markdown olarak yaz. Başlıklar ###, listeler '-' ile olsun.
-                Format:
-                1) Ne yapıyor?
-                2) Önemli parçalar
-                3) Riskler
-                4) İyileştirme
+            PromptType.EXPLAIN -> { """
+                You are an experienced software engineer and code reviewer.
+                   Analyze the following file in terms of its purpose and responsibility within the project.
 
-                Dosya adı: $fileName
-
-                --- DOSYA ---
+                When relevant, briefly reference:
+                - Clean Code principles (naming, readability, single responsibility)
+                - SOLID principles
+                - Clean Architecture (layers, boundaries, dependency direction)
+                - Design Patterns (only if they genuinely apply)
+                
+                Produce the output in Markdown format.
+                - Use `###` for headings
+                - Use `-` for lists
+                
+                Follow this structure:
+                
+                ### 1) What does it do?
+                Explain the file’s primary responsibility and role in the system.
+                
+                ### 2) Key components
+                - Important classes, functions, or logic blocks
+                - External dependencies or integrations
+                - High-level data flow (input → processing → output)
+                
+                ### 3) Architecture & code quality assessment
+                - Are responsibilities well separated? (SRP)
+                - Are dependencies pointing in the right direction? (DIP / Clean Architecture)
+                - Extensibility and testability (OCP, seams, abstractions)
+                
+                ### 4) Risks
+                - Potential bug sources or edge cases
+                - Performance or resource-usage concerns
+                - Security or stability risks (if applicable)
+                
+                ### 5) Improvement suggestions
+                - 3–6 high-impact, prioritized recommendations
+                - Use small code snippets only if helpful
+                
+                File name: $fileName
+                
+                --- FILE ---
                 $clippedContent
-            """.trimIndent()
+                """.trimIndent()
+            }
 
-            PromptType.REFACTOR -> """
-                Sen bir Android/Kotlin uzmanısın.
-                Aşağıdaki kodu daha temiz, performanslı ve Kotlin best practice'lerine uygun şekilde refactor et.
-                Önce yapılan değişikliklerin kısa bir özetini ver, sonra refactor edilmiş kodun tamamını bir kerede paylaş.
-                Çıktıyı Markdown olarak yaz.
-
-                Dosya adı: $fileName
-
-                --- DOSYA ---
+            PromptType.REFACTOR -> { """
+                You are an experienced software engineer acting as a technical lead.
+                
+                Refactor the following code **without changing its behavior**.
+                Focus on:
+                - Clean Code (readability, naming, small functions, reduced duplication)
+                - SOLID principles (especially SRP, DIP, OCP where applicable)
+                - Clean Architecture boundaries (if relevant)
+                - Design Patterns only when they provide clear value (avoid overengineering)
+                
+                Produce the output in Markdown format and follow this order:
+                
+                ### Summary of changes
+                - What was changed?
+                - Why was it changed?
+                - What problem does it solve?
+                
+                ### Refactored code
+                - Provide the complete refactored code in a single block
+                - Avoid unnecessary explanations inside the code
+                - Do not break existing behavior or public APIs
+                - Keep the solution minimal and pragmatic
+                
+                File name: $fileName
+                
+                --- FILE ---
                 $clippedContent
-            """.trimIndent()
+                """.trimIndent()
+            }
         }
     }
 }

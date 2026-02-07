@@ -9,10 +9,6 @@ import com.tellme.tellmeplugin.ui.session.Session
 import javax.swing.JComponent
 import javax.swing.JPanel
 
-/**
- * Manages tabs in the Tell Me tool window.
- * Each tab represents a file analysis session.
- */
 class TabManager(
     project: Project,
     parentDisposable: com.intellij.openapi.Disposable,

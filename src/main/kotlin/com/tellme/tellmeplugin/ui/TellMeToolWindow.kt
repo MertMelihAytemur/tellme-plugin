@@ -23,10 +23,6 @@ import java.awt.datatransfer.StringSelection
 import java.util.concurrent.ConcurrentHashMap
 import javax.swing.*
 
-/**
- * Main UI component for the Tell Me tool window.
- * Coordinates sessions, tabs, and rendering.
- */
 class TellMeToolWindow(private val project: Project) : Disposable {
 
     companion object {
@@ -43,12 +39,9 @@ class TellMeToolWindow(private val project: Project) : Disposable {
         }
     }
 
-    // Managers
     private val sessionManager = SessionManager.getOrCreate(project)
     private lateinit var tabManager: TabManager
 
-    // UI Components
-    // Components
     private val rootPanel = JPanel(BorderLayout())
 
     private val headerPanel = JPanel(BorderLayout()).apply {
@@ -76,15 +69,13 @@ class TellMeToolWindow(private val project: Project) : Disposable {
         add(rightPanel, BorderLayout.EAST)
     }
 
-    // Renderers
     private val cefRenderer = CefRenderer(this)
     private val swingRenderer = SwingRenderer()
     private val useJcef = cefRenderer.isSupported
 
-    // Timers
     private val renderDebounceMs = 50
     private val idleDoneMs = 650L
-    private val maxLoadingMs = 60_000L  // 60 seconds timeout for slow models
+    private val maxLoadingMs = 60_000L
 
     private val renderTimer: Timer = Timer(renderDebounceMs) { renderCurrentState() }.apply {
         isRepeats = false
@@ -98,19 +89,16 @@ class TellMeToolWindow(private val project: Project) : Disposable {
     private var startedWhenShowing = false
 
     init {
-        // Initialize TabManager
         tabManager = TabManager(project, this) { key ->
             sessionManager.selectSession(key ?: "")
             if (key == null) sessionManager.clearSelection()
             renderCurrentState(true)
-            scrollToTop() // Switch to top on tab change
+            scrollToTop()
         }
 
-        // Header with tabs
         headerPanel.add(tabManager.getComponent(), BorderLayout.CENTER)
         rootPanel.add(headerPanel, BorderLayout.NORTH)
 
-        // Viewer component
         val viewerComponent: JComponent = if (useJcef) {
             cefRenderer.getComponent()!!
         } else {
@@ -122,14 +110,11 @@ class TellMeToolWindow(private val project: Project) : Disposable {
         setStatusReady("Ready")
         showReady()
 
-        // Bind renderer link clicks
         cefRenderer.onLinkClicked = { url: String -> handleLinkClick(url) }
         swingRenderer.onLinkClicked = { url: String -> handleLinkClick(url) }
 
-        // Initial check
         checkOllamaStatus()
 
-        // JCEF hierarchy listener
         if (useJcef) {
             cefRenderer.getComponent()!!.addHierarchyListener {
                 val component = cefRenderer.getComponent()!!
@@ -161,28 +146,21 @@ class TellMeToolWindow(private val project: Project) : Disposable {
 
     fun getContent(): JComponent = rootPanel
 
-    /**
-     * Opens or creates a tab for the given file and starts analysis if needed.
-     */
     fun openOrCreateTabAndMaybeStart(fileName: String, filePath: String, clipped: String) {
         val key = Session.generateKey(filePath, clipped)
 
-        // If session already exists, just select it and render its current state
         if (sessionManager.hasSession(key)) {
             sessionManager.selectSession(key)
             tabManager.selectTab(key)
-            // Force immediate render of selected session's state
             renderCurrentState(true)
             return
         }
 
-        // Create new session and tab
         val session = sessionManager.createSession(fileName, filePath, clipped)
         tabManager.addTab(session) { closeKey -> closeTab(closeKey) }
         tabManager.selectTab(key)
         sessionManager.selectSession(key)
 
-        // Don't start analysis immediately - show selection screen first
         session.state = UiState.WAITING_FOR_SELECTION
         renderCurrentState(true)
     }
@@ -192,8 +170,6 @@ class TellMeToolWindow(private val project: Project) : Disposable {
         tabManager.removeTab(key)
         renderCurrentState(true)
     }
-
-    // ---- Analysis ----
 
     private fun startAnalysis(session: Session, type: OllamaConfig.PromptType = OllamaConfig.PromptType.EXPLAIN) {
         session.state = UiState.LOADING
@@ -253,7 +229,6 @@ class TellMeToolWindow(private val project: Project) : Disposable {
 
     private fun refreshCurrent() {
         val session = sessionManager.getCurrentSession() ?: return
-        // Reset session state and buffer to show selection screen again
         session.requestId += 1
         session.buffer.setLength(0)
         session.hasToken = false
@@ -272,8 +247,6 @@ class TellMeToolWindow(private val project: Project) : Disposable {
         if (text.isBlank()) return
         CopyPasteManager.getInstance().setContents(StringSelection(text))
     }
-
-    // ---- Rendering ----
 
     private fun scheduleRender() {
         if (SwingUtilities.isEventDispatchThread()) {
@@ -302,7 +275,6 @@ class TellMeToolWindow(private val project: Project) : Disposable {
             return
         }
 
-        // Dispatch based on state
         when (session.state) {
             UiState.LOADING -> {
                 val statusText = if (session.lastPromptType == OllamaConfig.PromptType.REFACTOR) "Refactoring…" else "Analyzing…"
@@ -337,13 +309,10 @@ class TellMeToolWindow(private val project: Project) : Disposable {
             swingRenderer.renderMarkdown(markdown, session.showCaret)
         }
         
-        // Keep rendering while loading for typewriter effect
         if (session.state == UiState.LOADING) {
             scheduleRender()
         }
     }
-
-    // ---- Tick (finish / timeout) ----
 
     private fun tickSessions() {
         val now = System.currentTimeMillis()
@@ -351,11 +320,9 @@ class TellMeToolWindow(private val project: Project) : Disposable {
         for (session in sessionManager.getAllSessions()) {
             if (session.state != UiState.LOADING) continue
 
-            // No token timeout -> ERROR
             if (!session.hasToken) {
                 val started = session.loadingStartedAtMs
                 if (started != 0L && now - started >= maxLoadingMs) {
-                    // Increment requestId to ignore any late-arriving tokens
                     session.requestId += 1
                     session.state = UiState.ERROR
                     session.showCaret = false
@@ -370,7 +337,6 @@ class TellMeToolWindow(private val project: Project) : Disposable {
                 continue
             }
 
-            // Idle -> DONE
             if (now - session.lastTokenAtMs >= idleDoneMs) {
                 session.state = UiState.DONE
                 session.showCaret = false
@@ -382,8 +348,6 @@ class TellMeToolWindow(private val project: Project) : Disposable {
             }
         }
     }
-
-    // ---- Status helpers ----
 
     private fun setStatusReady(text: String) {
         if (!SwingUtilities.isEventDispatchThread()) {
@@ -403,9 +367,6 @@ class TellMeToolWindow(private val project: Project) : Disposable {
         statusLabel.text = text
     }
     
-    /**
-     * Gets actions for the ToolWindow title bar.
-     */
     fun getTitleActions(): List<com.intellij.openapi.actionSystem.AnAction> {
         return listOf(
             object : com.intellij.openapi.actionSystem.AnAction("Menu", "Back to selection screen", AllIcons.Actions.ListFiles) {
@@ -416,8 +377,6 @@ class TellMeToolWindow(private val project: Project) : Disposable {
             }
         )
     }
-
-    // ---- Viewer helpers ----
 
     private fun showOnboarding() {
         if (useJcef) {
@@ -459,7 +418,6 @@ class TellMeToolWindow(private val project: Project) : Disposable {
 
         val session = sessionManager.getCurrentSession() ?: return
         
-        // Before any action, verify Ollama is still there
         ApplicationManager.getApplication().executeOnPooledThread {
             val status = OllamaClient.checkStatus()
             ollamaRunning = status.first

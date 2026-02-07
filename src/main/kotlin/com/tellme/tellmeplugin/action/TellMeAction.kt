@@ -8,10 +8,6 @@ import com.intellij.openapi.wm.ToolWindowManager
 import com.tellme.tellmeplugin.client.OllamaConfig
 import com.tellme.tellmeplugin.ui.TellMeToolWindow
 
-/**
- * Action that triggers file analysis.
- * Available in Editor popup menu and Tools menu.
- */
 class TellMeAction : AnAction("Tell Me") {
 
     override fun actionPerformed(e: AnActionEvent) {

@@ -1,13 +1,7 @@
-package com.tellme.tellmeplugin.ui.render
-
 import com.tellme.tellmeplugin.client.OllamaConfig
 
-/**
- * HTML template utilities for rendering content.
- */
 object HtmlTemplates {
 
-    /** Typing caret character for streaming effect */
     const val CARET_CHAR = "▍"
 
     /**

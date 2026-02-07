@@ -5,9 +5,6 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
-/**
- * HTTP client for streaming responses from Ollama API.
- */
 object OllamaClient {
 
     private val client = OkHttpClient.Builder()
@@ -19,10 +16,6 @@ object OllamaClient {
 
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
-    /**
-     * Checks if Ollama is running and the model is downloaded.
-     * Returns a pair of (isOllamaRunning, isModelDownloaded).
-     */
     fun checkStatus(): Pair<Boolean, Boolean> {
         val running = isOllamaRunning()
         if (!running) return false to false
@@ -33,7 +26,7 @@ object OllamaClient {
 
     private fun isOllamaRunning(): Boolean {
         val request = Request.Builder()
-            .url("http://localhost:11434/api/tags") // Use tags endpoint to check existence
+            .url("http://localhost:11434/api/tags")
             .get()
             .build()
         
@@ -54,7 +47,6 @@ object OllamaClient {
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return false
                 val body = response.body?.string() ?: return false
-                // Simple check if model name exists in the tags list
                 body.contains("\"name\":\"$modelName\"") || body.contains("\"name\":\"${modelName.substringBefore(":")}\"")
             }
         } catch (_: Exception) {
@@ -62,9 +54,6 @@ object OllamaClient {
         }
     }
 
-    /**
-     * Extracts text from Anthropic-style SSE event (content_block_delta).
-     */
     private fun extractDeltaText(json: String): String? {
         val key = "\"text\":\""
         val start = json.indexOf(key)
@@ -86,9 +75,6 @@ object OllamaClient {
             .replace("\\\\", "\\")
     }
 
-    /**
-     * Escapes a string for JSON encoding.
-     */
     private fun jsonString(s: String): String =
         "\"" + s
             .replace("\\", "\\\\")
@@ -97,9 +83,6 @@ object OllamaClient {
             .replace("\r", "\\r")
             .replace("\t", "\\t") + "\""
 
-    /**
-     * Streams file analysis using Anthropic-compatible API.
-     */
     fun explainFileStream(
         fileName: String,
         fileContent: String,
@@ -108,7 +91,6 @@ object OllamaClient {
     ) {
         val prompt = OllamaConfig.buildPrompt(fileName, fileContent, promptType)
 
-        // Anthropic Messages API format
         val body = """
         {
           "model": "${OllamaConfig.MODEL}",
@@ -143,7 +125,6 @@ object OllamaClient {
                     val data = line.substring(6)
                     if (data == "[DONE]") break
                     
-                    // Look for content_block_delta events
                     if (data.contains("\"content_block_delta\"") || data.contains("\"text\"")) {
                         val chunk = extractDeltaText(data)
                         if (!chunk.isNullOrEmpty()) onToken(chunk)

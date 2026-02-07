@@ -8,10 +8,6 @@ import javax.swing.JEditorPane
 import javax.swing.text.html.HTMLEditorKit
 import javax.swing.event.HyperlinkEvent
 
-/**
- * Fallback renderer using Swing JEditorPane.
- * Used when JCEF is not available.
- */
 class SwingRenderer {
 
     /** Callback for when a tellme:// link is clicked */
